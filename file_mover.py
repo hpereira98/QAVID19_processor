@@ -15,7 +15,7 @@ def main():
     load_dotenv()
     try:
         # destination dir
-        DEST_DIR = os.environ.get("DEST_DIR")
+        DEST_DIR = os.environ.get("SOURCE_DIR")
         # source pages dir
         PAGES_DIR = os.environ.get("PAGES_DIR")
     except Exception as e:
