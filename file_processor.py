@@ -3,9 +3,11 @@ import shutil
 import sys
 import json
 import base64
+import html2text
 from time import sleep
 from datetime import datetime
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 
 # execution interval
 EXE_INTERVAL = 7200 # 2 hours
@@ -16,13 +18,28 @@ def decode_base64(str):
     message = message_bytes.decode('utf-8')
     return message
 
-def parse_html(str):
-    pass
+def parse_html(html_parser, html_str):
+    return html_parser.handle(html_str)
 
-def process_file(file_path, finished_path, err_path):
+def parse_html_bs4(html_str):
+    soup = BeautifulSoup(html_str, features="html.parser")
+    # kill all script and style elements
+    for script in soup(["script", "style"]):
+        script.extract()    # rip it out
+    # get text
+    text = soup.get_text()
+    # # break into lines and remove leading and trailing space on each
+    # lines = (line.strip() for line in text.splitlines())
+    # # break multi-headlines into a line each
+    # chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    # # drop blank lines
+    # text = '\n'.join(chunk for chunk in chunks if chunk)
+    return text
+
+def process_file(filename, inprogress_path, finished_path, err_path, html_parser, clean_text_dir):
     try:
         # Open JSON file
-        f = open(file_path)
+        f = open(inprogress_path + "/" + filename)
         # load file to dict
         data = json.load(f)
 
@@ -30,19 +47,33 @@ def process_file(file_path, finished_path, err_path):
         decoded_html = decode_base64(data["content"])
 
         # parse html
-        parse_html(decoded_html)
+        text = parse_html(html_parser, decoded_html)
+        #text = parse_html_bs4(decoded_html)
+
+        # write clean text to file
+        with open(clean_text_dir + "/" + filename + ".txt", "w") as clean_text_file:
+            # Writing data to a file
+            clean_text_file.write(text)
 
         # move to finished
-        with open(finished_path, 'w') as outfile:
-            json.dump(data, outfile)
-        os.remove(file_path)
+        shutil.move(inprogress_path + "/" + filename, finished_path + "/" + filename)
         return True
 
     except Exception as e:
         print("Error trying to process file:", e)
         # move to failed
-        shutil.move(file_path, err_path)
+        shutil.move(inprogress_path + "/" + filename, err_path + "/" + filename)
         return False
+
+def init_html_parser():
+    html_parser = html2text.HTML2Text()
+    html_parser.ignore_links = True
+    html_parser.bypass_tables = False
+    html_parser.ignore_images = True
+    html_parser.ignore_emphasis = True
+    html_parser.ignore_tables = True
+    html_parser.use_automatic_links = False
+    return html_parser
 
 def main():
     # load env vars
@@ -56,9 +87,13 @@ def main():
         ERROR_DIR = os.environ.get("ERROR_DIR")
         # finished_dir
         FINISHED_DIR = os.environ.get("FINISHED_DIR")
+        # clean text dir
+        CLEAN_TEXT_DIR = os.environ.get("CLEAN_TEXT_DIR")
     except Exception as e:
         print("Error loading .env vars:", e)
         sys.exit()
+
+    html_parser = init_html_parser()
 
     # start execution
     while True:
@@ -75,7 +110,7 @@ def main():
             # start processing files
             for _, _, files in os.walk(INPROGRESS_DIR):
                 for filename in files:
-                    if process_file(INPROGRESS_DIR + '/' + filename, FINISHED_DIR + '/' + filename, ERROR_DIR + '/' + filename):
+                    if process_file(filename, INPROGRESS_DIR, FINISHED_DIR, ERROR_DIR, html_parser, CLEAN_TEXT_DIR):
                         processed_files_count += 1
                     else:
                         error_files_count += 1
