@@ -4,6 +4,8 @@ import sys
 import json
 import base64
 import html2text
+import requests
+from elasticsearch import Elasticsearch
 from time import sleep
 from datetime import datetime
 from dotenv import load_dotenv
@@ -17,6 +19,12 @@ def decode_base64(str):
     message_bytes = base64.b64decode(base64_bytes)
     message = message_bytes.decode('utf-8')
     return message
+
+def encode_base64(str):
+    message_bytes = str.encode('utf-8')
+    base64_bytes = base64.b64encode(message_bytes)
+    base64_message = base64_bytes.decode('utf-8')
+    return base64_message
 
 def parse_html(html_parser, html_str):
     return html_parser.handle(html_str)
@@ -36,7 +44,12 @@ def parse_html_bs4(html_str):
     # text = '\n'.join(chunk for chunk in chunks if chunk)
     return text
 
-def process_file(filename, inprogress_path, finished_path, err_path, html_parser, clean_text_dir):
+def create_elasticsearch_doc(es, url, text, idx):
+    doc = {"url": url, "text": text, "indexed_date": datetime.now()}
+    es.index(index=idx, id=encode_base64(url), body=doc)
+
+
+def process_file(filename, inprogress_path, finished_path, err_path, html_parser, clean_text_dir, es):
     try:
         # Open JSON file
         f = open(inprogress_path + "/" + filename)
@@ -45,6 +58,7 @@ def process_file(filename, inprogress_path, finished_path, err_path, html_parser
 
         # decode base64 string
         decoded_html = decode_base64(data["content"])
+        # data["content"] = decoded_html
 
         # parse html
         text = parse_html(html_parser, decoded_html)
@@ -54,6 +68,13 @@ def process_file(filename, inprogress_path, finished_path, err_path, html_parser
         with open(clean_text_dir + "/" + filename + ".txt", "w") as clean_text_file:
             # Writing data to a file
             clean_text_file.write(text)
+
+        # with open(clean_text_dir + "_1/" + filename + ".txt", "w") as decoded_json:
+        #     # Writing data to a file
+        #     json.dump(data,decoded_json)
+
+        # index treated text with elasticsearch
+        create_elasticsearch_doc(es, data["url"], text, "covid_pt")        
 
         # move to finished
         shutil.move(inprogress_path + "/" + filename, finished_path + "/" + filename)
@@ -75,6 +96,14 @@ def init_html_parser():
     html_parser.use_automatic_links = False
     return html_parser
 
+def init_elasticsearch():
+    es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+    return es
+
+def check_elasticsearch_running():
+    res = requests.get('http://localhost:9200')
+    return res.status_code
+
 def main():
     # load env vars
     load_dotenv()
@@ -94,6 +123,21 @@ def main():
         sys.exit()
 
     html_parser = init_html_parser()
+    es = init_elasticsearch()
+
+    try:
+        es_status = check_elasticsearch_running()
+    except:
+        print("Could not connect to ElasticSearch!")
+        print("Exiting...")
+        sys.exit()
+
+    if es_status != 200:
+        print("Could not connect to ElasticSearch!")
+        print("Exiting...")
+        sys.exit()
+    else:
+        print("Connected successfully to ElasticSearch!")
 
     # start execution
     while True:
@@ -110,7 +154,7 @@ def main():
             # start processing files
             for _, _, files in os.walk(INPROGRESS_DIR):
                 for filename in files:
-                    if process_file(filename, INPROGRESS_DIR, FINISHED_DIR, ERROR_DIR, html_parser, CLEAN_TEXT_DIR):
+                    if process_file(filename, INPROGRESS_DIR, FINISHED_DIR, ERROR_DIR, html_parser, CLEAN_TEXT_DIR, es):
                         processed_files_count += 1
                     else:
                         error_files_count += 1
