@@ -6,3 +6,4 @@ html2text==2020.1.16
 python-dotenv==0.17.1
 soupsieve==2.2.1
 urllib3==1.26.5
+langdetect==1.0.9

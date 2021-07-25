@@ -10,9 +10,11 @@ from time import sleep
 from datetime import datetime
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+from langdetect import detect
 
 # execution interval
-EXE_INTERVAL = 7200 # 2 hours
+EXE_INTERVAL = 7200  # 2 hours
+
 
 def decode_base64(str):
     base64_bytes = str.encode('utf-8')
@@ -20,14 +22,17 @@ def decode_base64(str):
     message = message_bytes.decode('utf-8')
     return message
 
+
 def encode_base64(str):
     message_bytes = str.encode('utf-8')
     base64_bytes = base64.b64encode(message_bytes)
     base64_message = base64_bytes.decode('utf-8')
     return base64_message
 
+
 def parse_html(html_parser, html_str):
     return html_parser.handle(html_str)
+
 
 def parse_html_bs4(html_str):
     soup = BeautifulSoup(html_str, features="html.parser")
@@ -43,6 +48,7 @@ def parse_html_bs4(html_str):
     # # drop blank lines
     # text = '\n'.join(chunk for chunk in chunks if chunk)
     return text
+
 
 def create_elasticsearch_doc(es, url, text, idx):
     doc = {"url": url, "text": text, "indexed_date": datetime.now()}
@@ -64,27 +70,36 @@ def process_file(filename, inprogress_path, finished_path, err_path, html_parser
         text = parse_html(html_parser, decoded_html)
         #text = parse_html_bs4(decoded_html)
 
+        # detect language
+        lang = detect(text)
+
         # write clean text to file
         with open(clean_text_dir + "/" + filename + ".txt", "w") as clean_text_file:
             # Writing data to a file
             clean_text_file.write(text)
+
+        # create index name
+        idx = "covid_" + lang
 
         # with open(clean_text_dir + "_1/" + filename + ".txt", "w") as decoded_json:
         #     # Writing data to a file
         #     json.dump(data,decoded_json)
 
         # index treated text with elasticsearch
-        create_elasticsearch_doc(es, data["url"], text, "covid_pt")        
+        create_elasticsearch_doc(es, data["url"], text, idx)
 
         # move to finished
-        shutil.move(inprogress_path + "/" + filename, finished_path + "/" + filename)
+        shutil.move(inprogress_path + "/" + filename,
+                    finished_path + "/" + filename)
         return True
 
     except Exception as e:
         print("Error trying to process file:", e)
         # move to failed
-        shutil.move(inprogress_path + "/" + filename, err_path + "/" + filename)
+        shutil.move(inprogress_path + "/" + filename,
+                    err_path + "/" + filename)
         return False
+
 
 def init_html_parser():
     html_parser = html2text.HTML2Text()
@@ -96,13 +111,16 @@ def init_html_parser():
     html_parser.use_automatic_links = False
     return html_parser
 
+
 def init_elasticsearch():
     es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
     return es
 
+
 def check_elasticsearch_running():
     res = requests.get('http://localhost:9200')
     return res.status_code
+
 
 def main():
     # load env vars
@@ -149,7 +167,8 @@ def main():
             for _, _, files in os.walk(SOURCE_DIR):
                 for filename in files:
                     #shutil.move(SOURCE_DIR + '/' + filename, INPROGRESS_DIR + '/' + filename)
-                    shutil.copy2(SOURCE_DIR + '/' + filename, INPROGRESS_DIR + '/' + filename)
+                    shutil.copy2(SOURCE_DIR + '/' + filename,
+                                 INPROGRESS_DIR + '/' + filename)
 
             # start processing files
             for _, _, files in os.walk(INPROGRESS_DIR):
@@ -158,7 +177,7 @@ def main():
                         processed_files_count += 1
                     else:
                         error_files_count += 1
-            
+
             print("Processed files:", processed_files_count)
             print("Failed processing:", error_files_count)
             sleep(EXE_INTERVAL)
@@ -167,6 +186,7 @@ def main():
             print("Interruption signal at", datetime.now())
             print("Stopping execution...")
             sys.exit()
+
 
 if __name__ == '__main__':
     main()
