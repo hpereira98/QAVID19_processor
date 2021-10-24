@@ -71,10 +71,18 @@ def process_file(filename, inprogress_path, finished_path, err_path, html_parser
         #text = parse_html_bs4(decoded_html)
 
         # detect language
-        lang = detect(text)
+        try:
+            lang = detect(text.lower())
+        except Exception as e:
+            print("Error on language detection:", e)
+            lang = "undefined"
+
+        if lang not in lang_count:
+            lang_count[lang] = 0
+        lang_count[lang] += 1
 
         # write clean text to file
-        with open(clean_text_dir + "/" + filename + ".txt", "w") as clean_text_file:
+        with open(f"{clean_text_dir}/{filename}.txt", "w") as clean_text_file:
             # Writing data to a file
             clean_text_file.write(text)
 
@@ -91,6 +99,7 @@ def process_file(filename, inprogress_path, finished_path, err_path, html_parser
         # move to finished
         shutil.move(inprogress_path + "/" + filename,
                     finished_path + "/" + filename)
+
         return True
 
     except Exception as e:
@@ -125,6 +134,10 @@ def check_elasticsearch_running():
 def main():
     # load env vars
     load_dotenv()
+
+    global lang_count
+    lang_count = {}
+
     try:
         # source dir
         SOURCE_DIR = os.environ.get("SOURCE_DIR")
@@ -166,9 +179,10 @@ def main():
             # iterate over files in source_dir and move them to inprogress_dir
             for _, _, files in os.walk(SOURCE_DIR):
                 for filename in files:
-                    #shutil.move(SOURCE_DIR + '/' + filename, INPROGRESS_DIR + '/' + filename)
-                    shutil.copy2(SOURCE_DIR + '/' + filename,
-                                 INPROGRESS_DIR + '/' + filename)
+                    shutil.move(SOURCE_DIR + '/' + filename,
+                                INPROGRESS_DIR + '/' + filename)
+                    # shutil.copy2(SOURCE_DIR + '/' + filename,
+                    #              INPROGRESS_DIR + '/' + filename)
 
             # start processing files
             for _, _, files in os.walk(INPROGRESS_DIR):
@@ -180,6 +194,7 @@ def main():
 
             print("Processed files:", processed_files_count)
             print("Failed processing:", error_files_count)
+            print("Language Count: ", lang_count)
             sleep(EXE_INTERVAL)
 
         except KeyboardInterrupt:
