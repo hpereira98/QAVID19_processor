@@ -27,7 +27,7 @@ def encode_base64(str):
     message_bytes = str.encode('utf-8')
     base64_bytes = base64.b64encode(message_bytes)
     base64_message = base64_bytes.decode('utf-8')
-    return base64_message
+    return base64_message[:512]
 
 
 def parse_html(html_parser, html_str):
@@ -82,12 +82,12 @@ def process_file(filename, inprogress_path, finished_path, err_path, html_parser
         lang_count[lang] += 1
 
         # write clean text to file
-        with open(f"{clean_text_dir}/{filename}.txt", "w") as clean_text_file:
-            # Writing data to a file
-            clean_text_file.write(text)
+        # with open(f"{clean_text_dir}/{filename}.txt", "w") as clean_text_file:
+        #     # Writing data to a file
+        #     clean_text_file.write(text)
 
         # create index name
-        idx = "covid_" + lang
+        idx = f"covid_{lang}_v2"
 
         # with open(clean_text_dir + "_1/" + filename + ".txt", "w") as decoded_json:
         #     # Writing data to a file
